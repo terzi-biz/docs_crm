@@ -1,6 +1,7 @@
 import express from "express";
 import { db } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
+import { STATUSES, advanceStatus } from "../services/statusWorkflow.js";
 
 const router = express.Router();
 
@@ -24,13 +25,12 @@ const FIELDS = [
   "full_payment_amount",
 ];
 
-export const STATUSES = [
-  "Новий",
-  "Документи підготовлені",
-  "Рахунок виставлений",
-  "Договір підписаний",
-  "Роботи виконані",
-  "Закритий",
+const REQUIRED_FOR_COMPLETE = [
+  "client_phone",
+  "client_email",
+  "object_area",
+  "work_type",
+  "manager_name",
 ];
 
 function computeTotal(body) {
@@ -49,8 +49,12 @@ function validate(body) {
   return null;
 }
 
+function isDataComplete(body) {
+  return REQUIRED_FOR_COMPLETE.every((f) => body[f] !== null && body[f] !== undefined && body[f] !== "");
+}
+
 router.get("/", requireAuth, (req, res) => {
-  const { q, manager, status, dateFrom, dateTo } = req.query;
+  const { q, manager, status, workType, dateFrom, dateTo } = req.query;
   let sql = "SELECT * FROM objects WHERE 1=1";
   const params = [];
   if (q) {
@@ -66,6 +70,10 @@ router.get("/", requireAuth, (req, res) => {
     sql += " AND status = ?";
     params.push(status);
   }
+  if (workType) {
+    sql += " AND work_type = ?";
+    params.push(workType);
+  }
   if (dateFrom) {
     sql += " AND contract_date >= ?";
     params.push(dateFrom);
@@ -78,6 +86,15 @@ router.get("/", requireAuth, (req, res) => {
   res.json(db.prepare(sql).all(...params));
 });
 
+router.get("/stats", requireAuth, (req, res) => {
+  const total = db.prepare("SELECT COUNT(*) c FROM objects").get().c;
+  const byStatus = {};
+  for (const s of STATUSES) {
+    byStatus[s] = db.prepare("SELECT COUNT(*) c FROM objects WHERE status = ?").get(s).c;
+  }
+  res.json({ total, byStatus });
+});
+
 router.get("/:id", requireAuth, (req, res) => {
   const obj = db.prepare("SELECT * FROM objects WHERE id = ?").get(req.params.id);
   if (!obj) return res.status(404).json({ error: "Об'єкт не знайдено" });
@@ -85,7 +102,11 @@ router.get("/:id", requireAuth, (req, res) => {
     .prepare("SELECT * FROM estimates WHERE object_id = ? ORDER BY created_at DESC")
     .all(obj.id);
   const documents = db
-    .prepare("SELECT * FROM documents WHERE object_id = ? ORDER BY created_at DESC")
+    .prepare(
+      `SELECT documents.*, users.name as created_by_name FROM documents
+       LEFT JOIN users ON users.id = documents.created_by
+       WHERE object_id = ? ORDER BY documents.created_at DESC`
+    )
     .all(obj.id);
   res.json({ ...obj, estimates, documents });
 });
@@ -96,17 +117,19 @@ router.post("/", requireAuth, (req, res) => {
 
   const contract_number = String(req.body.keycrm_deal_number).trim();
   const total_amount = computeTotal(req.body);
+  const status = isDataComplete(req.body) ? "Дані заповнені" : "Новий об'єкт";
 
   try {
     const result = db
       .prepare(
-        `INSERT INTO objects (${FIELDS.join(",")}, contract_number, total_amount, created_by)
-         VALUES (${FIELDS.map(() => "?").join(",")}, ?, ?, ?)`
+        `INSERT INTO objects (${FIELDS.join(",")}, contract_number, total_amount, status, created_by)
+         VALUES (${FIELDS.map(() => "?").join(",")}, ?, ?, ?, ?)`
       )
       .run(
         ...FIELDS.map((f) => req.body[f] ?? null),
         contract_number,
         total_amount,
+        status,
         req.user.id
       );
     const created = db.prepare("SELECT * FROM objects WHERE id = ?").get(result.lastInsertRowid);
@@ -133,6 +156,10 @@ router.put("/:id", requireAuth, (req, res) => {
   db.prepare(
     `UPDATE objects SET ${FIELDS.map((f) => `${f} = ?`).join(",")}, contract_number = ?, total_amount = ?, updated_at = datetime('now') WHERE id = ?`
   ).run(...FIELDS.map((f) => merged[f] ?? null), contract_number, total_amount, req.params.id);
+
+  if (existing.status === "Новий об'єкт" && isDataComplete(merged)) {
+    advanceStatus(req.params.id, "Дані заповнені");
+  }
 
   res.json(db.prepare("SELECT * FROM objects WHERE id = ?").get(req.params.id));
 });

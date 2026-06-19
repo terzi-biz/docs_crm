@@ -78,6 +78,8 @@ function baseData(obj) {
     work_type: obj.work_type || "",
     screed_thickness: obj.screed_thickness || "",
     work_duration: obj.work_duration || "",
+    manager_name: obj.manager_name || "",
+    notes: obj.notes || "",
     total_amount: fmtMoney(obj.total_amount),
     total_amount_words: amountToWordsUA(obj.total_amount),
     is_advance: isAdvance,

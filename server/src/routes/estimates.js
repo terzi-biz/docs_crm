@@ -6,6 +6,8 @@ import { fileURLToPath } from "url";
 import { db } from "../db/index.js";
 import { requireAuth } from "../middleware/auth.js";
 import { parseEstimateFile } from "../services/estimateParser.js";
+import { analyzeWithAi, normalizeAndRecalculate, isAiEnabled, aiConfigError } from "../services/aiEstimateAnalyzer.js";
+import { advanceStatus } from "../services/statusWorkflow.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const UPLOAD_DIR = path.join(__dirname, "..", "..", "uploads");
@@ -15,6 +17,8 @@ const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 20 * 1024 * 1024 }
 
 const router = express.Router();
 
+const AI_CONFIDENCE_THRESHOLD = 0.6;
+
 router.post("/:objectId/upload", requireAuth, upload.single("file"), async (req, res) => {
   const obj = db.prepare("SELECT * FROM objects WHERE id = ?").get(req.params.objectId);
   if (!obj) return res.status(404).json({ error: "Об'єкт не знайдено" });
@@ -22,21 +26,67 @@ router.post("/:objectId/upload", requireAuth, upload.single("file"), async (req,
 
   try {
     const parsed = await parseEstimateFile(req.file.path, req.file.originalname);
-    const result = db
+    let result = normalizeAndRecalculate(parsed);
+    let usedAi = false;
+    let aiNotice = null;
+
+    const lowConfidence = parsed.parser_confidence < AI_CONFIDENCE_THRESHOLD;
+    if (lowConfidence) {
+      if (isAiEnabled()) {
+        const configError = aiConfigError();
+        if (configError) {
+          aiNotice = configError;
+        } else {
+          try {
+            result = await analyzeWithAi(parsed.raw_text || "");
+            usedAi = true;
+          } catch (aiError) {
+            aiNotice = "AI-аналіз не вдався: " + aiError.message + ". Використано базовий парсер.";
+          }
+        }
+      } else {
+        aiNotice = "AI-аналіз вимкнено. Використано базовий парсер.";
+      }
+    }
+
+    const warnings = [...result.warnings];
+    if (aiNotice) warnings.push(aiNotice);
+    if (result.materials.length === 0 && result.works.length === 0) {
+      warnings.push(
+        "Не вдалося автоматично розпізнати смету. Перевірте формат файлу або завантажте XLSX."
+      );
+    }
+
+    const status = warnings.length > 0 || result.parser_confidence < AI_CONFIDENCE_THRESHOLD
+      ? "pending_review"
+      : "parsed";
+
+    const insert = db
       .prepare(
-        `INSERT INTO estimates (object_id, source_filename, materials_json, works_json, materials_total, works_total, grand_total, status)
-         VALUES (?,?,?,?,?,?,?, 'pending_review')`
+        `INSERT INTO estimates (object_id, source_filename, raw_text, raw_json, materials_json, works_json, materials_total, works_total, grand_total, parser_confidence, warnings_json, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
         obj.id,
         req.file.originalname,
-        JSON.stringify(parsed.materials),
-        JSON.stringify(parsed.works),
-        parsed.materials_total,
-        parsed.works_total,
-        parsed.grand_total
+        (parsed.raw_text || "").slice(0, 100000),
+        JSON.stringify({ usedAi }),
+        JSON.stringify(result.materials),
+        JSON.stringify(result.works),
+        result.materials_total,
+        result.works_total,
+        result.grand_total,
+        result.parser_confidence,
+        JSON.stringify(warnings),
+        status
       );
-    const estimate = db.prepare("SELECT * FROM estimates WHERE id = ?").get(result.lastInsertRowid);
+
+    advanceStatus(obj.id, "Кошторис завантажено");
+    if (status === "parsed" || (result.materials.length || result.works.length)) {
+      advanceStatus(obj.id, "Кошторис розпізнано");
+    }
+
+    const estimate = db.prepare("SELECT * FROM estimates WHERE id = ?").get(insert.lastInsertRowid);
     res.status(201).json(estimate);
   } catch (e) {
     res.status(400).json({ error: "Не вдалося обробити кошторис: " + e.message });
@@ -52,24 +102,59 @@ router.get("/:id", requireAuth, (req, res) => {
 });
 
 router.put("/:id", requireAuth, (req, res) => {
-  const { materials, works, status } = req.body;
+  const { materials, works } = req.body;
   const existing = db.prepare("SELECT * FROM estimates WHERE id = ?").get(req.params.id);
   if (!existing) return res.status(404).json({ error: "Не знайдено" });
+  if (existing.status === "confirmed") {
+    return res.status(400).json({ error: "Кошторис вже підтверджено. Завантажте новий файл для змін." });
+  }
 
-  const materials_total = round2((materials || JSON.parse(existing.materials_json)).reduce((s, m) => s + Number(m.sum || 0), 0));
-  const works_total = round2((works || JSON.parse(existing.works_json)).reduce((s, w) => s + Number(w.sum || 0), 0));
+  const finalMaterials = (materials || JSON.parse(existing.materials_json)).map((m, idx) => ({
+    ...m,
+    position: idx + 1,
+    sum: Math.round((Number(m.quantity) || 0) * (Number(m.price) || 0) * 100) / 100,
+  }));
+  const finalWorks = (works || JSON.parse(existing.works_json)).map((w, idx) => ({
+    ...w,
+    position: idx + 1,
+    sum: Math.round((Number(w.quantity) || 0) * (Number(w.price) || 0) * 100) / 100,
+  }));
+
+  const materials_total = round2(finalMaterials.reduce((s, m) => s + m.sum, 0));
+  const works_total = round2(finalWorks.reduce((s, w) => s + w.sum, 0));
 
   db.prepare(
-    `UPDATE estimates SET materials_json = ?, works_json = ?, materials_total = ?, works_total = ?, grand_total = ?, status = ? WHERE id = ?`
+    `UPDATE estimates SET materials_json = ?, works_json = ?, materials_total = ?, works_total = ?, grand_total = ?, status = 'pending_review' WHERE id = ?`
   ).run(
-    JSON.stringify(materials || JSON.parse(existing.materials_json)),
-    JSON.stringify(works || JSON.parse(existing.works_json)),
+    JSON.stringify(finalMaterials),
+    JSON.stringify(finalWorks),
     materials_total,
     works_total,
     round2(materials_total + works_total),
-    status || existing.status,
     req.params.id
   );
+
+  res.json(db.prepare("SELECT * FROM estimates WHERE id = ?").get(req.params.id));
+});
+
+router.post("/:id/confirm", requireAuth, (req, res) => {
+  const existing = db.prepare("SELECT * FROM estimates WHERE id = ?").get(req.params.id);
+  if (!existing) return res.status(404).json({ error: "Не знайдено" });
+
+  const materials = JSON.parse(existing.materials_json);
+  const works = JSON.parse(existing.works_json);
+  if (materials.length === 0 && works.length === 0) {
+    return res.status(400).json({ error: "Неможливо підтвердити порожню смету. Додайте хоча б один рядок." });
+  }
+
+  const materials_total = round2(materials.reduce((s, m) => s + Number(m.sum || 0), 0));
+  const works_total = round2(works.reduce((s, w) => s + Number(w.sum || 0), 0));
+
+  db.prepare(
+    `UPDATE estimates SET materials_total = ?, works_total = ?, grand_total = ?, status = 'confirmed', confirmed_at = datetime('now'), confirmed_by = ? WHERE id = ?`
+  ).run(materials_total, works_total, round2(materials_total + works_total), req.user.id, req.params.id);
+
+  advanceStatus(existing.object_id, "Кошторис перевірено");
 
   res.json(db.prepare("SELECT * FROM estimates WHERE id = ?").get(req.params.id));
 });
