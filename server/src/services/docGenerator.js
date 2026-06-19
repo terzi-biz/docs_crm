@@ -97,6 +97,33 @@ function lineItemsTable(items) {
     .join("\n");
 }
 
+/** Merges admin-defined custom field values for `obj` into the docxtemplater
+ * data object. Required-and-empty custom fields block generation with a
+ * clear error instead of silently rendering blank text. */
+export function customFieldData(objectId) {
+  const fields = db.prepare("SELECT * FROM custom_fields WHERE is_active = 1").all();
+  const values = db
+    .prepare("SELECT custom_field_id, value FROM object_custom_field_values WHERE object_id = ?")
+    .all(objectId);
+  const valueByFieldId = new Map(values.map((v) => [v.custom_field_id, v.value]));
+
+  const data = {};
+  const missing = [];
+  for (const f of fields) {
+    const value = valueByFieldId.get(f.id) ?? "";
+    if (f.required && !String(value).trim()) {
+      missing.push(f.label);
+    }
+    data[f.key] = value;
+  }
+  if (missing.length) {
+    throw new Error(
+      `Заповніть обов'язкові поля перед генерацією документа: ${missing.join(", ")}.`
+    );
+  }
+  return data;
+}
+
 function baseData(obj) {
   const { contract_day, contract_month, contract_year } = dateParts(obj.contract_date);
   const isAdvance = obj.payment_mode === "advance_final";
@@ -131,6 +158,7 @@ function baseData(obj) {
     is_full: !isAdvance,
     advance_payment: fmtMoney(obj.advance_payment),
     final_payment: fmtMoney(obj.final_payment),
+    ...customFieldData(obj.id),
   };
 }
 
@@ -182,11 +210,15 @@ export async function generateInvoice(obj, invoiceKind, invoiceNumber) {
     full: `Оплата (100%) за послуги ${obj.work_type || "виконання робіт"}`,
   };
 
+  const labelMap = { advance: "аванс", final: "остаток", full: "100%" };
+
   const today = new Date();
   const data = {
     ...baseData(obj),
     invoice_number: invoiceNumber,
     invoice_date: today.toLocaleDateString("uk-UA"),
+    invoice_kind: invoiceKind,
+    invoice_label: labelMap[invoiceKind] || invoiceKind,
     payment_purpose: purposeMap[invoiceKind] || purposeMap.full,
     work_description: obj.work_type || "Виконання робіт",
     invoice_amount: fmtMoney(amount),

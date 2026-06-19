@@ -8,6 +8,8 @@ import estimatesRoutes from "./routes/estimates.js";
 import documentsRoutes from "./routes/documents.js";
 import workTypesRoutes from "./routes/workTypes.js";
 import templatesRoutes from "./routes/templates.js";
+import customFieldsRoutes from "./routes/customFields.js";
+import variablesRoutes from "./routes/variables.js";
 
 const app = express();
 app.use(cors());
@@ -19,6 +21,8 @@ app.use("/api/estimates", estimatesRoutes);
 app.use("/api/documents", documentsRoutes);
 app.use("/api/work-types", workTypesRoutes);
 app.use("/api/templates", templatesRoutes);
+app.use("/api/custom-fields", customFieldsRoutes);
+app.use("/api/variables", variablesRoutes);
 
 app.get("/api/health", (req, res) => res.json({ ok: true }));
 

@@ -108,8 +108,32 @@ router.get("/:id", requireAuth, (req, res) => {
        WHERE object_id = ? ORDER BY documents.created_at DESC`
     )
     .all(obj.id);
-  res.json({ ...obj, estimates, documents });
+  const customFieldValues = db
+    .prepare(
+      `SELECT custom_fields.key, object_custom_field_values.value
+       FROM object_custom_field_values
+       JOIN custom_fields ON custom_fields.id = object_custom_field_values.custom_field_id
+       WHERE object_custom_field_values.object_id = ?`
+    )
+    .all(obj.id)
+    .reduce((acc, r) => ({ ...acc, [r.key]: r.value }), {});
+  res.json({ ...obj, estimates, documents, custom_fields: customFieldValues });
 });
+
+function saveCustomFieldValues(objectId, values) {
+  if (!values || typeof values !== "object") return;
+  const fields = db.prepare("SELECT id, key FROM custom_fields").all();
+  const fieldByKey = new Map(fields.map((f) => [f.key, f.id]));
+  const upsert = db.prepare(
+    `INSERT INTO object_custom_field_values (object_id, custom_field_id, value, updated_at)
+     VALUES (?,?,?,datetime('now'))
+     ON CONFLICT(object_id, custom_field_id) DO UPDATE SET value = excluded.value, updated_at = datetime('now')`
+  );
+  for (const [key, value] of Object.entries(values)) {
+    const fieldId = fieldByKey.get(key);
+    if (fieldId) upsert.run(objectId, fieldId, value === null || value === undefined ? "" : String(value));
+  }
+}
 
 router.post("/", requireAuth, (req, res) => {
   const error = validate(req.body);
@@ -132,6 +156,7 @@ router.post("/", requireAuth, (req, res) => {
         status,
         req.user.id
       );
+    saveCustomFieldValues(result.lastInsertRowid, req.body.custom_fields);
     const created = db.prepare("SELECT * FROM objects WHERE id = ?").get(result.lastInsertRowid);
     res.status(201).json(created);
   } catch (e) {
@@ -160,6 +185,8 @@ router.put("/:id", requireAuth, (req, res) => {
   if (existing.status === "Новий об'єкт" && isDataComplete(merged)) {
     advanceStatus(req.params.id, "Дані заповнені");
   }
+
+  saveCustomFieldValues(req.params.id, req.body.custom_fields);
 
   res.json(db.prepare("SELECT * FROM objects WHERE id = ?").get(req.params.id));
 });

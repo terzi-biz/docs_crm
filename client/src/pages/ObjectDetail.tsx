@@ -238,18 +238,24 @@ export default function ObjectDetail() {
                     </td>
                     <td className="px-2 py-2">
                       {d.docx_path ? (
-                        <a className="text-[#0b1830] font-medium hover:underline" href={api.downloadUrl(d.id, "docx")}>
+                        <button
+                          className="text-[#0b1830] font-medium hover:underline"
+                          onClick={() => api.downloadDocument(d.id, "docx", `${DOC_LABELS[d.type] || d.type}_v${d.version}.docx`).catch((e) => setError(e.message))}
+                        >
                           Завантажити
-                        </a>
+                        </button>
                       ) : (
                         "—"
                       )}
                     </td>
                     <td className="px-2 py-2">
                       {d.pdf_path ? (
-                        <a className="text-[#0b1830] font-medium hover:underline" href={api.downloadUrl(d.id, "pdf")}>
+                        <button
+                          className="text-[#0b1830] font-medium hover:underline"
+                          onClick={() => api.downloadDocument(d.id, "pdf", `${DOC_LABELS[d.type] || d.type}_v${d.version}.pdf`).catch((e) => setError(e.message))}
+                        >
                           Завантажити
-                        </a>
+                        </button>
                       ) : (
                         <span className="text-gray-400">не сформовано</span>
                       )}

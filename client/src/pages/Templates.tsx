@@ -21,6 +21,7 @@ export default function Templates() {
   const [name, setName] = useState("");
   const [isActive, setIsActive] = useState(true);
   const [file, setFile] = useState<File | null>(null);
+  const [validation, setValidation] = useState<{ id: number; result: any } | null>(null);
 
   async function load() {
     const data = await api.listTemplates();
@@ -71,6 +72,16 @@ export default function Templates() {
     try {
       await api.deleteTemplate(t.id);
       await load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }
+
+  async function validateTemplate(t: any) {
+    setError("");
+    try {
+      const result = await api.validateTemplate(t.id);
+      setValidation({ id: t.id, result });
     } catch (e: any) {
       setError(e.message);
     }
@@ -143,9 +154,15 @@ export default function Templates() {
                   </td>
                   <td className="px-4 py-3">{t.updated_at}</td>
                   <td className="px-4 py-3 flex gap-3">
-                    <a className="text-[#0b1830] hover:underline" href={api.templateDownloadUrl(t.id)}>
+                    <button
+                      className="text-[#0b1830] hover:underline"
+                      onClick={() => api.downloadTemplate(t.id, `${t.name}.docx`).catch((e) => setError(e.message))}
+                    >
                       Завантажити
-                    </a>
+                    </button>
+                    <button onClick={() => validateTemplate(t)} className="text-[#0b1830] hover:underline">
+                      Перевірити переменні
+                    </button>
                     <button onClick={() => toggleActive(t)} className="text-[#0b1830] hover:underline">
                       {t.is_active ? "Деактивувати" : "Активувати"}
                     </button>
@@ -165,6 +182,48 @@ export default function Templates() {
             </tbody>
           </table>
         </div>
+
+        {validation && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mt-6">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-[#0b1830]">Результат перевірки переменних</h2>
+              <button className="text-gray-400 hover:underline text-sm" onClick={() => setValidation(null)}>
+                Закрити
+              </button>
+            </div>
+            <div className="text-sm mb-2">
+              <span className="text-gray-500">Знайдені переменні: </span>
+              {validation.result.found.length ? validation.result.found.join(", ") : "—"}
+            </div>
+            {validation.result.loops?.length > 0 && (
+              <div className="text-sm mb-2">
+                <span className="text-gray-500">Циклы: </span>
+                {validation.result.loops.join(", ")}
+              </div>
+            )}
+            {validation.result.unknown.length > 0 && (
+              <div className="text-sm mb-2">
+                <span className="text-red-600 font-medium">Невідомі переменні:</span>
+                <ul className="list-disc ml-5">
+                  {validation.result.unknown.map((u: any) => (
+                    <li key={u.variable} className="text-red-600">
+                      {u.message}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {validation.result.missingRecommended.length > 0 && (
+              <div className="text-sm">
+                <span className="text-amber-600 font-medium">Рекомендовані переменні, яких немає: </span>
+                {validation.result.missingRecommended.join(", ")}
+              </div>
+            )}
+            {validation.result.unknown.length === 0 && validation.result.missingRecommended.length === 0 && (
+              <div className="text-sm text-green-700">Шаблон коректний — всі переменні відомі.</div>
+            )}
+          </div>
+        )}
       </main>
     </div>
   );
