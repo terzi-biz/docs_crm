@@ -10,4 +10,6 @@ server/documents/*
 !server/documents/.gitkeep
 server/uploads/*
 !server/uploads/.gitkeep
+server/templates/uploads/*
+!server/templates/uploads/.gitkeep
 client/dist/

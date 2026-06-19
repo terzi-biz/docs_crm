@@ -58,14 +58,30 @@ export const api = {
   confirmEstimate: (id: string | number) =>
     request(`/estimates/${id}/confirm`, { method: "POST" }),
 
-  generateContract: (objectId: string | number) =>
-    request(`/documents/${objectId}/contract`, { method: "POST" }),
-  generateEstimateDoc: (objectId: string | number) =>
-    request(`/documents/${objectId}/estimate`, { method: "POST" }),
-  generateInvoice: (objectId: string | number, kind: string) =>
-    request(`/documents/${objectId}/invoice`, { method: "POST", body: JSON.stringify({ kind }) }),
+  latestEstimate: (objectId: string | number) =>
+    request(`/estimates/object/${objectId}/latest`).catch(() => null),
+  reanalyzeEstimate: (id: string | number) =>
+    request(`/estimates/${id}/reanalyze`, { method: "POST" }),
+
+  generateDocument: (objectId: string | number, type: string) =>
+    request(`/documents/${objectId}/generate`, { method: "POST", body: JSON.stringify({ type }) }),
   generatePackage: (objectId: string | number) =>
-    request(`/documents/${objectId}/package`, { method: "POST" }),
+    request(`/documents/${objectId}/generate-package`, { method: "POST" }),
+  listDocuments: (objectId: string | number) => request(`/documents/object/${objectId}`),
   downloadUrl: (docId: number, format: "docx" | "pdf") =>
     `/api/documents/${docId}/download/${format}`,
+
+  listTemplates: () => request("/templates"),
+  uploadTemplate: (data: { type: string; name: string; is_active: boolean; file: File }) => {
+    const fd = new FormData();
+    fd.append("type", data.type);
+    fd.append("name", data.name);
+    fd.append("is_active", String(data.is_active));
+    fd.append("file", data.file);
+    return request("/templates/upload", { method: "POST", body: fd });
+  },
+  patchTemplate: (id: number, data: any) =>
+    request(`/templates/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+  deleteTemplate: (id: number) => request(`/templates/${id}`, { method: "DELETE" }),
+  templateDownloadUrl: (id: number) => `/api/templates/${id}/download`,
 };

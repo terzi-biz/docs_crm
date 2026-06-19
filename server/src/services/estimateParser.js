@@ -130,7 +130,19 @@ function round2(n) {
 export function parseXlsxEstimate(filePath) {
   const wb = XLSX.readFile(filePath);
   const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  return parseRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }));
+}
+
+export function parseCsvEstimate(filePath) {
+  // Read as UTF-8 text explicitly — XLSX.readFile() defaults to a binary/Latin-1
+  // codepage for CSV, which mangles Cyrillic text (mojibake).
+  const text = fs.readFileSync(filePath, "utf8");
+  const wb = XLSX.read(text, { type: "string", raw: true });
+  const sheet = wb.Sheets[wb.SheetNames[0]];
+  return parseRows(XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" }));
+}
+
+function parseRows(rows) {
   const rawText = rows.map((r) => rowToArray(r).join(" | ")).join("\n");
 
   let materials = [];
@@ -232,6 +244,7 @@ export async function parseDocxEstimate(filePath) {
 export async function parseEstimateFile(filePath, originalName) {
   const ext = originalName.toLowerCase().split(".").pop();
   if (ext === "xlsx" || ext === "xls") return parseXlsxEstimate(filePath);
+  if (ext === "csv") return parseCsvEstimate(filePath);
   if (ext === "pdf") return parsePdfEstimate(filePath);
   if (ext === "docx" || ext === "doc") return parseDocxEstimate(filePath);
   throw new Error("Непідтримуваний формат файлу: " + ext);

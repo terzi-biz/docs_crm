@@ -8,6 +8,8 @@ const DOC_LABELS: Record<string, string> = {
   contract: "Договір",
   estimate: "Кошторис",
   invoice: "Рахунок",
+  act: "Акт",
+  commercial_offer: "Комерційна пропозиція",
 };
 
 const INVOICE_KIND_LABELS: Record<string, string> = {
@@ -131,14 +133,14 @@ export default function ObjectDetail() {
           <h2 className="font-semibold text-[#0b1830] mb-3">Пакет документів TERZI</h2>
           <div className="flex flex-wrap gap-3 mb-3">
             <button
-              onClick={() => runAction(() => api.generateContract(id!), "contract")}
+              onClick={() => runAction(() => api.generateDocument(id!, "contract"), "contract")}
               disabled={!!busyAction || !requiredObjectFieldsFilled}
               className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
             >
               Створити договір
             </button>
             <button
-              onClick={() => runAction(() => api.generateEstimateDoc(id!), "estimate")}
+              onClick={() => runAction(() => api.generateDocument(id!, "estimate"), "estimate")}
               disabled={!!busyAction || !isConfirmed}
               className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
             >
@@ -147,14 +149,14 @@ export default function ObjectDetail() {
             {obj.payment_mode === "advance_final" ? (
               <>
                 <button
-                  onClick={() => runAction(() => api.generateInvoice(id!, "advance"), "invoice_a")}
+                  onClick={() => runAction(() => api.generateDocument(id!, "invoice_advance"), "invoice_a")}
                   disabled={!!busyAction || !invoiceReady}
                   className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
                 >
                   Рахунок на аванс
                 </button>
                 <button
-                  onClick={() => runAction(() => api.generateInvoice(id!, "final"), "invoice_f")}
+                  onClick={() => runAction(() => api.generateDocument(id!, "invoice_final"), "invoice_f")}
                   disabled={!!busyAction || !invoiceReady}
                   className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
                 >
@@ -163,13 +165,27 @@ export default function ObjectDetail() {
               </>
             ) : (
               <button
-                onClick={() => runAction(() => api.generateInvoice(id!, "full"), "invoice_full")}
+                onClick={() => runAction(() => api.generateDocument(id!, "invoice_full"), "invoice_full")}
                 disabled={!!busyAction || !invoiceReady}
                 className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
               >
                 Рахунок на 100%
               </button>
             )}
+            <button
+              onClick={() => runAction(() => api.generateDocument(id!, "act"), "act")}
+              disabled={!!busyAction || (obj.status !== "Роботи виконані" && obj.status !== "Закрито")}
+              className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
+            >
+              Створити акт
+            </button>
+            <button
+              onClick={() => runAction(() => api.generateDocument(id!, "commercial_offer"), "commercial_offer")}
+              disabled={!!busyAction}
+              className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
+            >
+              Комерційна пропозиція
+            </button>
             <button
               onClick={() => runAction(() => api.generatePackage(id!), "package")}
               disabled={!!busyAction || !isConfirmed}
@@ -178,6 +194,9 @@ export default function ObjectDetail() {
               {busyAction === "package" ? "Створення..." : "Створити повний пакет"}
             </button>
           </div>
+          {obj.status !== "Роботи виконані" && obj.status !== "Закрито" && (
+            <p className="text-xs text-gray-400">Акт можна створити лише після того, як роботи виконані.</p>
+          )}
           {!isConfirmed && (
             <p className="text-xs text-gray-400">Кошторис та повний пакет потребують підтвердженого кошторису.</p>
           )}
@@ -195,6 +214,7 @@ export default function ObjectDetail() {
                   <th className="px-2 py-2">Версія</th>
                   <th className="px-2 py-2">Створено</th>
                   <th className="px-2 py-2">Автор</th>
+                  <th className="px-2 py-2">Статус</th>
                   <th className="px-2 py-2">DOCX</th>
                   <th className="px-2 py-2">PDF</th>
                 </tr>
@@ -209,6 +229,13 @@ export default function ObjectDetail() {
                     <td className="px-2 py-2">v{d.version}</td>
                     <td className="px-2 py-2">{d.created_at}</td>
                     <td className="px-2 py-2">{d.created_by_name || "—"}</td>
+                    <td className="px-2 py-2">
+                      {d.status === "created_no_pdf" ? (
+                        <span className="text-amber-600">тільки DOCX</span>
+                      ) : (
+                        <span className="text-green-700">створено</span>
+                      )}
+                    </td>
                     <td className="px-2 py-2">
                       {d.docx_path ? (
                         <a className="text-[#0b1830] font-medium hover:underline" href={api.downloadUrl(d.id, "docx")}>

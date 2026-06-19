@@ -75,13 +75,29 @@ CREATE TABLE IF NOT EXISTS estimates (
 CREATE TABLE IF NOT EXISTS documents (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   object_id INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
-  type TEXT NOT NULL CHECK(type IN ('contract','estimate','invoice')),
+  template_id INTEGER REFERENCES templates(id),
+  type TEXT NOT NULL CHECK(type IN ('contract','estimate','invoice','act','commercial_offer')),
   invoice_kind TEXT,
+  title TEXT,
   version INTEGER NOT NULL DEFAULT 1,
   docx_path TEXT,
   pdf_path TEXT,
+  status TEXT NOT NULL DEFAULT 'created',
+  warnings_json TEXT NOT NULL DEFAULT '[]',
   created_by INTEGER REFERENCES users(id),
   created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS templates (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  type TEXT NOT NULL CHECK(type IN ('contract','estimate','invoice','act','commercial_offer')),
+  name TEXT NOT NULL,
+  file_path TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_by INTEGER REFERENCES users(id),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 );
 `);
 
@@ -99,6 +115,40 @@ ensureColumn("estimates", "warnings_json", "warnings_json TEXT NOT NULL DEFAULT 
 ensureColumn("estimates", "confirmed_at", "confirmed_at TEXT");
 ensureColumn("estimates", "confirmed_by", "confirmed_by INTEGER REFERENCES users(id)");
 ensureColumn("documents", "created_by", "created_by INTEGER REFERENCES users(id)");
+ensureColumn("documents", "template_id", "template_id INTEGER REFERENCES templates(id)");
+ensureColumn("documents", "title", "title TEXT");
+ensureColumn("documents", "status", "status TEXT NOT NULL DEFAULT 'created'");
+ensureColumn("documents", "warnings_json", "warnings_json TEXT NOT NULL DEFAULT '[]'");
+ensureColumn("estimates", "source_file_path", "source_file_path TEXT");
+
+// The documents.type CHECK constraint predates 'act'/'commercial_offer'. SQLite
+// can't ALTER a CHECK constraint in place, so rebuild the table if it's stale.
+const documentsCheckSql = db
+  .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='documents'")
+  .get().sql;
+if (documentsCheckSql && !documentsCheckSql.includes("'act'")) {
+  db.exec(`
+    ALTER TABLE documents RENAME TO documents_old;
+    CREATE TABLE documents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      object_id INTEGER NOT NULL REFERENCES objects(id) ON DELETE CASCADE,
+      template_id INTEGER REFERENCES templates(id),
+      type TEXT NOT NULL CHECK(type IN ('contract','estimate','invoice','act','commercial_offer')),
+      invoice_kind TEXT,
+      title TEXT,
+      version INTEGER NOT NULL DEFAULT 1,
+      docx_path TEXT,
+      pdf_path TEXT,
+      status TEXT NOT NULL DEFAULT 'created',
+      warnings_json TEXT NOT NULL DEFAULT '[]',
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT DEFAULT (datetime('now'))
+    );
+    INSERT INTO documents (id, object_id, template_id, type, invoice_kind, title, version, docx_path, pdf_path, status, warnings_json, created_by, created_at)
+      SELECT id, object_id, template_id, type, invoice_kind, title, version, docx_path, pdf_path, status, warnings_json, created_by, created_at FROM documents_old;
+    DROP TABLE documents_old;
+  `);
+}
 
 // Seed default work types
 const workTypeCount = db.prepare("SELECT COUNT(*) c FROM work_types").get().c;
