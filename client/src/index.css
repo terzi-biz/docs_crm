@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+:root {
+  --terzi-navy: #0b1830;
+  --terzi-navy-light: #142a4a;
+  --terzi-gold: #c9a44c;
+}
+
 body {
   margin: 0;
   font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  background: #f4f5f7;
 }
 
 .input {
@@ -13,6 +20,21 @@ body {
   font-size: 0.875rem;
 }
 .input:focus {
-  outline: 2px solid #a855f7;
+  outline: 2px solid #c9a44c;
   outline-offset: -1px;
+}
+
+.btn-gold {
+  background: #c9a44c;
+  color: #0b1830;
+}
+.btn-gold:hover {
+  background: #b8923a;
+}
+.btn-navy {
+  background: #0b1830;
+  color: #fff;
+}
+.btn-navy:hover {
+  background: #142a4a;
 }

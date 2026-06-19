@@ -91,7 +91,7 @@ export default function ObjectForm() {
       <div className="max-w-3xl mx-auto bg-white rounded shadow p-6">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-xl font-semibold">{isEdit ? "Редагувати об'єкт" : "Новий об'єкт"}</h1>
-          <Link to="/" className="text-purple-600 hover:underline text-sm">
+          <Link to="/" className="text-[#0b1830] font-medium hover:underline text-sm">
             ← До списку
           </Link>
         </div>
@@ -281,7 +281,7 @@ export default function ObjectForm() {
             </Link>
             <button
               disabled={busy}
-              className="px-4 py-2 rounded bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              className="px-4 py-2 rounded btn-navy disabled:opacity-50"
             >
               {busy ? "Збереження..." : "Зберегти"}
             </button>

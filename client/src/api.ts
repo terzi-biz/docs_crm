@@ -40,6 +40,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return request(`/objects${qs ? "?" + qs : ""}`);
   },
+  objectStats: () => request("/objects/stats"),
   getObject: (id: string | number) => request(`/objects/${id}`),
   createObject: (data: any) => request("/objects", { method: "POST", body: JSON.stringify(data) }),
   updateObject: (id: string | number, data: any) =>
@@ -54,6 +55,8 @@ export const api = {
   },
   updateEstimate: (id: string | number, data: any) =>
     request(`/estimates/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  confirmEstimate: (id: string | number) =>
+    request(`/estimates/${id}/confirm`, { method: "POST" }),
 
   generateContract: (objectId: string | number) =>
     request(`/documents/${objectId}/contract`, { method: "POST" }),
