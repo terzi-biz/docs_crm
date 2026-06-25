@@ -44,7 +44,7 @@ async function analyzeEstimateFile(filePath, originalName) {
         }
       }
     } else {
-      aiNotice = "AI-анализ отключён. Включите AI_ENABLED=true и добавьте OPENAI_API_KEY.";
+      aiNotice = "AI-анализ отключён. Используется базовый парсер.";
     }
   }
 
@@ -52,7 +52,7 @@ async function analyzeEstimateFile(filePath, originalName) {
   if (aiNotice) warnings.push(aiNotice);
   if (result.materials.length === 0 && result.works.length === 0) {
     warnings.push(
-      "Не удалось автоматически распознать смету. Попробуйте загрузить XLSX или включить AI-анализ."
+      "Не удалось автоматически распознать смету. Загрузите другой файл, повторите распознавание или добавьте строки вручную."
     );
   }
 
