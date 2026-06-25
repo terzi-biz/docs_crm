@@ -78,10 +78,16 @@ router.post("/:objectId/upload", requireAuth, upload.single("file"), async (req,
     const storedPath = path.join(STORED_FILES_DIR, storedName);
     fs.copyFileSync(req.file.path, storedPath);
 
+    const lastVersion = db
+      .prepare("SELECT MAX(version) v FROM estimates WHERE object_id = ?")
+      .get(obj.id).v;
+    const version = (lastVersion || 0) + 1;
+    db.prepare("UPDATE estimates SET is_active = 0 WHERE object_id = ?").run(obj.id);
+
     const insert = db
       .prepare(
-        `INSERT INTO estimates (object_id, source_filename, source_file_path, raw_text, raw_json, materials_json, works_json, materials_total, works_total, grand_total, parser_confidence, warnings_json, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO estimates (object_id, source_filename, source_file_path, raw_text, raw_json, materials_json, works_json, materials_total, works_total, grand_total, parser_confidence, warnings_json, status, version, is_active)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)`
       )
       .run(
         obj.id,
@@ -96,7 +102,8 @@ router.post("/:objectId/upload", requireAuth, upload.single("file"), async (req,
         result.grand_total,
         result.parser_confidence,
         JSON.stringify(warnings),
-        status
+        status,
+        version
       );
 
     advanceStatus(obj.id, "Кошторис завантажено");
