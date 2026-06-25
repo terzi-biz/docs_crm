@@ -4,6 +4,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ObjectForm from "./pages/ObjectForm";
 import ObjectDetail from "./pages/ObjectDetail";
+import Templates from "./pages/Templates";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -45,6 +46,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <ObjectDetail />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/templates"
+        element={
+          <ProtectedRoute>
+            <Templates />
           </ProtectedRoute>
         }
       />

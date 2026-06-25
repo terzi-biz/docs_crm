@@ -8,8 +8,8 @@ import fs from "fs";
 // a "разом/всього/итого" total row. If the result looks unreliable
 // (low confidence), the caller falls back to the AI analyzer.
 
-const MATERIAL_MARKERS = ["матеріал", "материал"];
-const WORK_MARKERS = ["робот", "работ", "послуг"];
+const MATERIAL_MARKERS = ["матеріал", "материал", "materials"];
+const WORK_MARKERS = ["робот", "работ", "послуг", "вартість робіт", "стоимость работ", "work", "services"];
 const TOTAL_MARKERS = ["разом", "всього", "итого", "сума", "загальн"];
 
 function isMarkerRow(text, markers) {
@@ -127,35 +127,34 @@ function round2(n) {
   return Math.round(n * 100) / 100;
 }
 
+function allSheetRows(wb) {
+  // Estimates sometimes split materials and works across separate sheets,
+  // so every sheet is scanned, not just the first.
+  const rows = [];
+  for (const name of wb.SheetNames) {
+    const sheetRows = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: "" });
+    if (rows.length) rows.push([]); // blank separator row between sheets
+    rows.push(...sheetRows);
+  }
+  return rows;
+}
+
 export function parseXlsxEstimate(filePath) {
   const wb = XLSX.readFile(filePath);
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+  return parseRows(allSheetRows(wb));
+}
+
+export function parseCsvEstimate(filePath) {
+  // Read as UTF-8 text explicitly — XLSX.readFile() defaults to a binary/Latin-1
+  // codepage for CSV, which mangles Cyrillic text (mojibake).
+  const text = fs.readFileSync(filePath, "utf8");
+  const wb = XLSX.read(text, { type: "string", raw: true });
+  return parseRows(allSheetRows(wb));
+}
+
+function parseRows(rows) {
   const rawText = rows.map((r) => rowToArray(r).join(" | ")).join("\n");
-
-  let materials = [];
-  let works = [];
-
-  for (let i = 0; i < rows.length; i++) {
-    const rowText = rowToArray(rows[i]).join(" ").trim();
-    if (!rowText) continue;
-    if (isMarkerRow(rowText, MATERIAL_MARKERS) && materials.length === 0) {
-      const { items, nextIdx } = parseSection(rows, i + 1, "materials");
-      materials = items;
-      i = nextIdx - 1;
-    } else if (isMarkerRow(rowText, WORK_MARKERS) && works.length === 0) {
-      const { items, nextIdx } = parseSection(rows, i + 1, "works");
-      works = items;
-      i = nextIdx - 1;
-    }
-  }
-
-  // Fallback: no explicit section markers found — treat the whole sheet as works
-  if (materials.length === 0 && works.length === 0) {
-    const { items } = parseSection(rows, 0, "works");
-    works = items;
-  }
-
+  const { materials, works } = scanSections(rows);
   return buildResult(materials, works, rawText);
 }
 
@@ -175,27 +174,7 @@ export async function parsePdfEstimate(filePath) {
   }
 
   const rows = lines.map((line) => line.split(/\s{2,}|\t/).filter(Boolean));
-
-  let materials = [];
-  let works = [];
-  for (let i = 0; i < rows.length; i++) {
-    const rowText = rows[i].join(" ");
-    if (isMarkerRow(rowText, MATERIAL_MARKERS) && materials.length === 0) {
-      const { items, nextIdx } = parseSection(rows, i + 1, "materials");
-      materials = items;
-      i = nextIdx - 1;
-    } else if (isMarkerRow(rowText, WORK_MARKERS) && works.length === 0) {
-      const { items, nextIdx } = parseSection(rows, i + 1, "works");
-      works = items;
-      i = nextIdx - 1;
-    }
-  }
-
-  if (materials.length === 0 && works.length === 0) {
-    const { items } = parseSection(rows, 0, "works");
-    works = items;
-  }
-
+  const { materials, works } = scanSections(rows);
   return buildResult(materials, works, data.text);
 }
 
@@ -205,33 +184,39 @@ export async function parseDocxEstimate(filePath) {
   const text = result.value;
   const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
   const rows = lines.map((line) => line.split(/\s{2,}|\t|\|/).filter(Boolean));
+  const { materials, works } = scanSections(rows);
+  return buildResult(materials, works, text);
+}
 
+function scanSections(rows) {
   let materials = [];
   let works = [];
   for (let i = 0; i < rows.length; i++) {
-    const rowText = rows[i].join(" ");
-    if (isMarkerRow(rowText, MATERIAL_MARKERS) && materials.length === 0) {
+    const rowText = rowToArray(rows[i]).join(" ").trim();
+    if (!rowText) continue;
+    if (isMarkerRow(rowText, MATERIAL_MARKERS)) {
       const { items, nextIdx } = parseSection(rows, i + 1, "materials");
-      materials = items;
+      materials = materials.concat(items);
       i = nextIdx - 1;
-    } else if (isMarkerRow(rowText, WORK_MARKERS) && works.length === 0) {
+    } else if (isMarkerRow(rowText, WORK_MARKERS)) {
       const { items, nextIdx } = parseSection(rows, i + 1, "works");
-      works = items;
+      works = works.concat(items);
       i = nextIdx - 1;
     }
   }
-
   if (materials.length === 0 && works.length === 0) {
     const { items } = parseSection(rows, 0, "works");
     works = items;
   }
-
-  return buildResult(materials, works, text);
+  materials.forEach((m, idx) => (m.position = idx + 1));
+  works.forEach((w, idx) => (w.position = idx + 1));
+  return { materials, works };
 }
 
 export async function parseEstimateFile(filePath, originalName) {
   const ext = originalName.toLowerCase().split(".").pop();
   if (ext === "xlsx" || ext === "xls") return parseXlsxEstimate(filePath);
+  if (ext === "csv") return parseCsvEstimate(filePath);
   if (ext === "pdf") return parsePdfEstimate(filePath);
   if (ext === "docx" || ext === "doc") return parseDocxEstimate(filePath);
   throw new Error("Непідтримуваний формат файлу: " + ext);

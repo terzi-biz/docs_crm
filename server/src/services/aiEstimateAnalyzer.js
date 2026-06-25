@@ -30,13 +30,13 @@ export function aiConfigError() {
   if (!isAiEnabled()) return null;
   const provider = process.env.AI_PROVIDER || "";
   if (provider === "anthropic" && !process.env.ANTHROPIC_API_KEY) {
-    return "AI-аналіз включено, але ANTHROPIC_API_KEY не налаштований.";
+    return "AI-анализ включён, но ANTHROPIC_API_KEY не настроен.";
   }
   if (provider === "openai" && !process.env.OPENAI_API_KEY) {
-    return "AI-аналіз включено, але OPENAI_API_KEY не налаштований.";
+    return "AI-анализ включён, но OPENAI_API_KEY не настроен.";
   }
   if (provider !== "openai" && provider !== "anthropic") {
-    return "AI-аналіз включено, але AI_PROVIDER не налаштований (openai або anthropic).";
+    return "AI-анализ включён, но AI_PROVIDER не настроен (openai или anthropic).";
   }
   return null;
 }

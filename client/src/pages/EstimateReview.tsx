@@ -81,7 +81,22 @@ export default function EstimateBlock({
   }
 
   return (
-    <EstimateEditor estimate={estimate.row} onSaved={onSaved} />
+    <div>
+      <EstimateEditor estimate={estimate.row} onSaved={onSaved} />
+      <div className="mt-4">
+        <UploadZone
+          dragOver={dragOver}
+          setDragOver={setDragOver}
+          uploading={uploading}
+          uploadError={uploadError}
+          fileInputRef={fileInputRef}
+          onFile={handleFile}
+          title="Завантажити інший файл"
+          subtitle="Якщо розпізнавання невдале — спробуйте завантажити інший файл кошторису."
+          compact
+        />
+      </div>
+    </div>
   );
 }
 
@@ -164,7 +179,23 @@ function EstimateEditor({ estimate, onSaved }: { estimate: any; onSaved: (e: any
   const [works, setWorks] = useState<Item[]>(JSON.parse(estimate.works_json));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [showRaw, setShowRaw] = useState(false);
   const warnings: string[] = JSON.parse(estimate.warnings_json || "[]");
+
+  async function reanalyze() {
+    setBusy(true);
+    setError("");
+    try {
+      const updated = await api.reanalyzeEstimate(estimate.id);
+      setMaterials(JSON.parse(updated.materials_json));
+      setWorks(JSON.parse(updated.works_json));
+      onSaved(updated);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function updateItem(list: Item[], setList: (v: Item[]) => void, idx: number, field: keyof Item, value: string) {
     const next = [...list];
@@ -246,6 +277,12 @@ function EstimateEditor({ estimate, onSaved }: { estimate: any; onSaved: (e: any
         Разом: {(materialsTotal + worksTotal).toLocaleString("uk-UA")} грн
       </div>
       <div className="flex justify-end gap-3">
+        <button onClick={() => setShowRaw((v) => !v)} className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm">
+          {showRaw ? "Сховати сирий текст" : "Подивитися сирий текст"}
+        </button>
+        <button onClick={reanalyze} disabled={busy} className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm">
+          Повторити розпізнавання
+        </button>
         <button onClick={saveChanges} disabled={busy} className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 text-sm">
           Зберегти правки
         </button>
@@ -253,6 +290,14 @@ function EstimateEditor({ estimate, onSaved }: { estimate: any; onSaved: (e: any
           {busy ? "Обробка..." : "Підтвердити кошторис"}
         </button>
       </div>
+      {showRaw && (
+        <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3">
+          <p className="text-xs text-gray-500 mb-2">Сирий текст, розпізнаний з файлу кошторису:</p>
+          <pre className="text-xs whitespace-pre-wrap max-h-80 overflow-auto text-gray-700">
+            {estimate.raw_text || "Текст відсутній."}
+          </pre>
+        </div>
+      )}
     </div>
   );
 }

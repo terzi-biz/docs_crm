@@ -1,0 +1,60 @@
+// Catalog of placeholders that are always available to DOCX templates,
+// regardless of admin-defined custom fields. Used by the "Переменные и поля"
+// UI and by the template-validation pass to tell apart "unknown" vs "known".
+export const SYSTEM_VARIABLES = [
+  { key: "contract_number", description: "Номер договору", example: "TZ-2026-014" },
+  { key: "keycrm_deal_number", description: "Номер угоди KeyCRM", example: "12345" },
+  { key: "contract_date", description: "Дата договору", example: "2026-06-19" },
+  { key: "contract_day", description: "День договору", example: "19" },
+  { key: "contract_month", description: "Місяць договору (укр.)", example: "Червня" },
+  { key: "contract_year", description: "Рік договору", example: "2026" },
+  { key: "document_date", description: "Дата формування документа", example: "19.06.2026" },
+  { key: "document_number", description: "Номер документа", example: "TZ-2026-014" },
+  { key: "client_name", description: "Ім'я клієнта", example: "Іваненко Іван" },
+  { key: "client_phone", description: "Телефон клієнта", example: "+380501234567" },
+  { key: "client_email", description: "Email клієнта", example: "client@example.com" },
+  { key: "client_passport", description: "Паспортні дані клієнта", example: "СН123456" },
+  { key: "object_address", description: "Адреса об'єкту", example: "м. Київ, вул. Хрещатик, 1" },
+  { key: "object_area", description: "Площа об'єкту, м²", example: "120" },
+  { key: "work_type", description: "Вид робіт", example: "Полусуха стяжка" },
+  { key: "screed_thickness", description: "Товщина стяжки", example: "50 мм" },
+  { key: "work_duration", description: "Строк виконання робіт", example: "14 днів" },
+  { key: "manager_name", description: "Менеджер", example: "Петренко П.П." },
+  { key: "notes", description: "Примітки", example: "" },
+  { key: "payment_mode", description: "Тип оплати (текст)", example: "Аванс + остаточний розрахунок" },
+  { key: "total_amount", description: "Загальна сума", example: "50 000,00" },
+  { key: "total_amount_words", description: "Загальна сума словами", example: "п'ятдесят тисяч гривень" },
+  { key: "advance_payment", description: "Сума авансу", example: "20 000,00" },
+  { key: "advance_amount", description: "Сума авансу (alias)", example: "20 000,00" },
+  { key: "final_payment", description: "Сума остатку", example: "30 000,00" },
+  { key: "final_amount", description: "Сума остатку (alias)", example: "30 000,00" },
+  { key: "full_payment_amount", description: "Сума 100% оплати", example: "50 000,00" },
+  { key: "is_advance", description: "Булеве: режим аванс/остаток", example: "true" },
+  { key: "is_full", description: "Булеве: режим 100% оплати", example: "false" },
+  { key: "invoice_number", description: "Номер рахунку", example: "TZ-2026-014" },
+  { key: "invoice_date", description: "Дата рахунку", example: "19.06.2026" },
+  { key: "invoice_kind", description: "Тип рахунку (advance/final/full)", example: "advance" },
+  { key: "invoice_label", description: "Тип рахунку (текст)", example: "аванс" },
+  { key: "invoice_amount", description: "Сума рахунку", example: "20 000,00" },
+  { key: "invoice_amount_words", description: "Сума рахунку словами", example: "двадцять тисяч гривень" },
+  { key: "estimate_date", description: "Дата кошторису", example: "19.06.2026" },
+  { key: "materials_total", description: "Сума за матеріали", example: "30 000,00" },
+  { key: "works_total", description: "Сума за роботи", example: "20 000,00" },
+  { key: "grand_total", description: "Загальна сума кошторису", example: "50 000,00" },
+  { key: "materials_table", description: "Текстова таблиця матеріалів", example: "1. Цемент — 10 шт x 200,00 = 2000,00 грн" },
+  { key: "works_table", description: "Текстова таблиця робіт", example: "1. Монтаж — 1 шт x 5000,00 = 5000,00 грн" },
+];
+
+// Loop sections available in templates: {#materials}...{/materials} and {#works}...{/works}
+export const SYSTEM_LOOPS = {
+  materials: ["position", "name", "unit", "quantity", "price", "sum"],
+  works: ["position", "name", "unit", "quantity", "price", "sum"],
+};
+
+export const RECOMMENDED_VARIABLES = {
+  contract: ["contract_number", "contract_date", "client_name", "object_address", "work_type", "total_amount", "total_amount_words"],
+  estimate: ["materials_total", "works_total", "grand_total", "estimate_date"],
+  invoice: ["invoice_number", "invoice_date", "invoice_amount", "invoice_amount_words"],
+  act: ["contract_number", "client_name", "object_address", "work_type"],
+  commercial_offer: ["client_name", "object_address", "work_type", "total_amount"],
+};

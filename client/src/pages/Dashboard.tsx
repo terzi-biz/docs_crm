@@ -11,6 +11,7 @@ const STAT_CARDS = [
   { key: "Кошторис перевірено", label: "Кошторис перевірено" },
   { key: "Документи створено", label: "Документи створено" },
   { key: "Договір підписано", label: "Договір підписано" },
+  { key: "Закрито", label: "Закрито" },
 ];
 
 export default function Dashboard() {
@@ -60,6 +61,11 @@ export default function Dashboard() {
           TERZI <span className="text-[#c9a44c]">Docs CRM</span>
         </h1>
         <div className="flex items-center gap-4 text-sm">
+          {user?.role === "administrator" && (
+            <Link to="/templates" className="text-[#c9a44c] hover:underline">
+              Шаблони документів
+            </Link>
+          )}
           <span className="text-gray-300">{user?.name}</span>
           <button onClick={logout} className="text-[#c9a44c] hover:underline">
             Вийти
@@ -132,6 +138,7 @@ export default function Dashboard() {
                   <th className="px-4 py-3">№ Договору</th>
                   <th className="px-4 py-3">Клієнт</th>
                   <th className="px-4 py-3">Адреса</th>
+                  <th className="px-4 py-3">Вид робіт</th>
                   <th className="px-4 py-3">Сума</th>
                   <th className="px-4 py-3">Менеджер</th>
                   <th className="px-4 py-3">Статус</th>
@@ -147,6 +154,7 @@ export default function Dashboard() {
                     </td>
                     <td className="px-4 py-3">{o.client_name}</td>
                     <td className="px-4 py-3">{o.object_address}</td>
+                    <td className="px-4 py-3">{o.work_type || "—"}</td>
                     <td className="px-4 py-3">{Number(o.total_amount).toLocaleString("uk-UA")} грн</td>
                     <td className="px-4 py-3">{o.manager_name}</td>
                     <td className="px-4 py-3">
@@ -158,7 +166,7 @@ export default function Dashboard() {
                 ))}
                 {objects.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6 text-center text-gray-400">
+                    <td colSpan={7} className="px-4 py-6 text-center text-gray-400">
                       Об'єкти не знайдено
                     </td>
                   </tr>
