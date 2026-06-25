@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { api } from "../api";
 import EstimateBlock from "./EstimateReview";
 import StatusStepper, { STATUSES } from "../components/StatusStepper";
@@ -20,9 +20,12 @@ const INVOICE_KIND_LABELS: Record<string, string> = {
 
 export default function ObjectDetail() {
   const { id } = useParams();
+  const location = useLocation();
   const [obj, setObj] = useState<any>(null);
   const [error, setError] = useState("");
+  const [missingFields, setMissingFields] = useState<string[]>([]);
   const [busyAction, setBusyAction] = useState("");
+  const [toast, setToast] = useState((location.state as any)?.toast || "");
 
   async function load() {
     const data = await api.getObject(id!);
@@ -33,6 +36,12 @@ export default function ObjectDetail() {
     load();
   }, [id]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   if (!obj) return <div className="p-6 text-gray-500">Завантаження...</div>;
 
   const latestEstimate = obj.estimates[0];
@@ -40,12 +49,14 @@ export default function ObjectDetail() {
 
   async function runAction(action: () => Promise<any>, key: string) {
     setError("");
+    setMissingFields([]);
     setBusyAction(key);
     try {
       await action();
       await load();
     } catch (e: any) {
       setError(e.message);
+      setMissingFields(e.missingFields || []);
     } finally {
       setBusyAction("");
     }
@@ -64,9 +75,12 @@ export default function ObjectDetail() {
         <h1 className="text-lg font-semibold">
           Об'єкт №{obj.contract_number} <span className="text-[#c9a44c]">— {obj.client_name}</span>
         </h1>
-        <div className="flex gap-4 text-sm">
-          <Link to={`/objects/${id}/edit`} className="text-[#c9a44c] hover:underline">
-            Редагувати
+        <div className="flex gap-4 text-sm items-center">
+          <Link
+            to={`/objects/${id}/edit`}
+            className="flex items-center gap-2 bg-[#c9a44c] text-[#0b1830] font-semibold px-4 py-2 rounded hover:brightness-95"
+          >
+            <span aria-hidden>✏️</span> Редагувати об'єкт
           </Link>
           <Link to="/" className="text-[#c9a44c] hover:underline">
             ← До списку
@@ -75,7 +89,27 @@ export default function ObjectDetail() {
       </header>
 
       <main className="max-w-5xl mx-auto p-6">
-        {error && <div className="bg-red-50 text-red-700 text-sm p-3 rounded mb-4">{error}</div>}
+        {toast && (
+          <div className="bg-green-50 text-green-700 text-sm p-3 rounded mb-4 border border-green-200">{toast}</div>
+        )}
+        {error && (
+          <div className="bg-red-50 text-red-700 text-sm p-3 rounded mb-4 flex items-center justify-between">
+            <span>{error}</span>
+            {missingFields.length > 0 && (
+              <Link to={`/objects/${id}/edit`} className="font-medium underline whitespace-nowrap ml-3">
+                Перейти до редагування
+              </Link>
+            )}
+          </div>
+        )}
+        {!requiredObjectFieldsFilled && (
+          <div className="bg-amber-50 text-amber-800 text-sm p-3 rounded mb-4 border border-amber-200 flex items-center justify-between">
+            <span>Заповніть обов'язкові поля об'єкту, щоб розблокувати генерацію документів.</span>
+            <Link to={`/objects/${id}/edit`} className="font-medium underline whitespace-nowrap ml-3">
+              Перейти до редагування
+            </Link>
+          </div>
+        )}
 
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
           <div className="mb-4">
@@ -135,6 +169,7 @@ export default function ObjectDetail() {
             <button
               onClick={() => runAction(() => api.generateDocument(id!, "contract"), "contract")}
               disabled={!!busyAction || !requiredObjectFieldsFilled}
+              title={!requiredObjectFieldsFilled ? "Заповніть телефон, email, площу, вид робіт та менеджера об'єкту, щоб створити договір." : ""}
               className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
             >
               Створити договір
@@ -142,6 +177,7 @@ export default function ObjectDetail() {
             <button
               onClick={() => runAction(() => api.generateDocument(id!, "estimate"), "estimate")}
               disabled={!!busyAction || !isConfirmed}
+              title={!isConfirmed ? "Завантажте та підтвердіть кошторис у блоці вище, щоб створити документ кошторису." : ""}
               className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
             >
               Створити кошторис
@@ -151,6 +187,7 @@ export default function ObjectDetail() {
                 <button
                   onClick={() => runAction(() => api.generateDocument(id!, "invoice_advance"), "invoice_a")}
                   disabled={!!busyAction || !invoiceReady}
+                  title={!invoiceReady ? "Вкажіть суму авансу в даних об'єкту, щоб створити рахунок на аванс." : ""}
                   className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
                 >
                   Рахунок на аванс
@@ -158,6 +195,7 @@ export default function ObjectDetail() {
                 <button
                   onClick={() => runAction(() => api.generateDocument(id!, "invoice_final"), "invoice_f")}
                   disabled={!!busyAction || !invoiceReady}
+                  title={!invoiceReady ? "Вкажіть суму остатку в даних об'єкту, щоб створити рахунок на остаток." : ""}
                   className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
                 >
                   Рахунок на остаток
@@ -167,6 +205,7 @@ export default function ObjectDetail() {
               <button
                 onClick={() => runAction(() => api.generateDocument(id!, "invoice_full"), "invoice_full")}
                 disabled={!!busyAction || !invoiceReady}
+                title={!invoiceReady ? "Вкажіть повну суму оплати в даних об'єкту, щоб створити рахунок на 100%." : ""}
                 className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
               >
                 Рахунок на 100%
@@ -175,6 +214,11 @@ export default function ObjectDetail() {
             <button
               onClick={() => runAction(() => api.generateDocument(id!, "act"), "act")}
               disabled={!!busyAction || (obj.status !== "Роботи виконані" && obj.status !== "Закрито")}
+              title={
+                obj.status !== "Роботи виконані" && obj.status !== "Закрито"
+                  ? "Акт можна створити лише після того, як статус об'єкту стане 'Роботи виконані' або 'Закрито'."
+                  : ""
+              }
               className="px-4 py-2 rounded bg-gray-100 hover:bg-gray-200 disabled:opacity-40 text-sm"
             >
               Створити акт
@@ -189,6 +233,7 @@ export default function ObjectDetail() {
             <button
               onClick={() => runAction(() => api.generatePackage(id!), "package")}
               disabled={!!busyAction || !isConfirmed}
+              title={!isConfirmed ? "Завантажте та підтвердіть кошторис, щоб створити повний пакет документів." : ""}
               className="btn-navy px-5 py-2 rounded disabled:opacity-40 text-sm font-medium"
             >
               {busyAction === "package" ? "Створення..." : "Створити повний пакет"}

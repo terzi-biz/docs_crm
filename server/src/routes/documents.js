@@ -43,21 +43,48 @@ function estimateDataFromRow(row) {
   };
 }
 
+const FIELD_LABELS = {
+  client_name: "ПІБ клієнта",
+  object_address: "Адреса об'єкту",
+  contract_date: "Дата договору",
+  work_type: "Вид робіт",
+  client_phone: "Телефон клієнта",
+  client_email: "Email клієнта",
+  object_area: "Площа об'єкту",
+  manager_name: "Менеджер",
+  total_amount: "Загальна сума",
+  payment_mode: "Тип оплати",
+};
+
 function canGenerate(obj, type) {
   if (type === "contract") {
-    if (!obj.client_name || !obj.object_address || !obj.contract_date || !obj.work_type) {
-      return "Для договору потрібно заповнити клієнта, адресу, дату договору та вид робіт.";
+    const missing = ["client_name", "object_address", "contract_date", "work_type"].filter((f) => !obj[f]);
+    if (missing.length) {
+      return {
+        error: `Для договору не заповнені поля: ${missing.map((f) => FIELD_LABELS[f]).join(", ")}.`,
+        missingFields: missing,
+      };
     }
   }
   if (type === "estimate") {
-    if (!getConfirmedEstimate(obj.id)) return "Спочатку завантажте та підтвердіть кошторис.";
+    if (!getConfirmedEstimate(obj.id))
+      return { error: "Спочатку завантажте та підтвердіть кошторис.", missingFields: [] };
   }
   if (type.startsWith("invoice_")) {
-    if (!obj.total_amount || !obj.payment_mode) return "Заповніть суму та тип оплати перед створенням рахунку.";
+    const missing = ["total_amount", "payment_mode"].filter((f) => !obj[f]);
+    if (missing.length) {
+      return {
+        error: `Для рахунку не заповнені поля: ${missing.map((f) => FIELD_LABELS[f]).join(", ")}.`,
+        missingFields: missing,
+      };
+    }
   }
   if (type === "act") {
     if (obj.status !== "Роботи виконані" && obj.status !== "Закрито") {
-      return "Акт можна створити лише після того, як роботи виконані.";
+      return {
+        error: "Акт можна створити лише після того, як роботи виконані.",
+        missingFields: [],
+      };
     }
   }
   return null;
@@ -120,7 +147,7 @@ router.post("/:objectId/generate", requireAuth, async (req, res) => {
   if (!type || !TITLES[type]) return res.status(400).json({ error: "Невірний тип документа" });
 
   const blockReason = canGenerate(obj, type);
-  if (blockReason) return res.status(400).json({ error: blockReason });
+  if (blockReason) return res.status(400).json(blockReason);
 
   try {
     const record = await generateOne(obj, type, req.user.id);
@@ -137,7 +164,7 @@ router.post("/:objectId/generate-package", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Спочатку завантажте та підтвердіть кошторис." });
   }
   const contractIssue = canGenerate(obj, "contract");
-  if (contractIssue) return res.status(400).json({ error: contractIssue });
+  if (contractIssue) return res.status(400).json(contractIssue);
 
   const invoiceType =
     obj.payment_mode === "full" ? "invoice_full" : "invoice_advance";
